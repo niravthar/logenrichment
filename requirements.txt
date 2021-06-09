@@ -1,0 +1,3 @@
+apache-beam[GCP]
+google-cloud-resource-manager==0.30.3
+google-cloud-storage==1.38.0
