@@ -3,6 +3,7 @@ import setuptools
 REQUIRED_PACKAGES = [
     'google',
     'google-cloud-storage',
+    'google-cloud-logging',
     'google-cloud-resource-manager',
     'apache-beam',
     'apache-beam[GCP]'
