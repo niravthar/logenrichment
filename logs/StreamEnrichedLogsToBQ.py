@@ -36,13 +36,13 @@ class JobOptions(PipelineOptions):
         parser.add_argument(
             "--bq_dataset",
             type=str,
-            help="Bigquery Dataset to write raw salesforce data",
+            help="Bigquery Dataset to write enriched logs",
             default='enriched_logs',
         )
         parser.add_argument(
             "--bq_table",
             type=str,
-            help="Bigquery Table to write raw salesforce data",
+            help="Bigquery Table to write write enriched logs",
             default='logs1',
         )
 
