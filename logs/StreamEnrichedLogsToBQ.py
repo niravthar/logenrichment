@@ -9,6 +9,7 @@ import apache_beam.transforms.window as window
 from apache_beam.options.pipeline_options import PipelineOptions
 from bigquery_schema_generator.generate_schema import SchemaGenerator, read_existing_schema_from_file
 from google.cloud import bigquery
+from apache_beam.io.gcp.bigquery import parse_table_schema_from_json
 
 
 class JobOptions(PipelineOptions):
@@ -36,13 +37,13 @@ class JobOptions(PipelineOptions):
         parser.add_argument(
             "--bq_dataset",
             type=str,
-            help="Bigquery Dataset to write enriched logs",
+            help="Bigquery Dataset to write raw salesforce data",
             default='enriched_logs',
         )
         parser.add_argument(
             "--bq_table",
             type=str,
-            help="Bigquery Table to write write enriched logs",
+            help="Bigquery Table to write raw salesforce data",
             default='logs1',
         )
 
@@ -145,23 +146,35 @@ def run(argv):
     pipeline_options = PipelineOptions(pipeline_args, save_main_session=True, streaming=True)
     options = pipeline_options.view_as(JobOptions)
 
+    #bq show --schema --format=prettyjson jp-poc-platform:enriched_logs.cloudaudit_googleapis_com_data_access > bq_table.json
+    schema_json_file = 'logs1_table.json'
+    with open(schema_json_file) as f:
+        data = f.read()
+        # Wrapping the schema in fields is required for the BigQuery API.
+        schema_str = '{"fields": ' + data + '}'
+
+    table_schema = parse_table_schema_from_json(schema_str)
+
+    logging.info(f"Table Schema is .... {table_schema}")
+
     with beam.Pipeline(options=pipeline_options) as pipeline:
         realtime_data = (
                 pipeline
                 | "Read PubSub Messages" >> beam.io.ReadFromPubSub(subscription=options.input_subscription, with_attributes=True)
                 | "Convert Messages to JSON" >> beam.ParDo(ConvertDataToJson())
                 | f"Write to {options.bq_table}" >> beam.io.WriteToBigQuery(
-                    table=f"{options.bq_dataset}.{options.bq_table}",
-                    write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-                    insert_retry_strategy=beam.io.gcp.bigquery_tools.RetryStrategy.RETRY_NEVER
-                )
+            table=f"{options.bq_dataset}.{options.bq_table}",
+            schema=table_schema,
+            write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+            insert_retry_strategy=beam.io.gcp.bigquery_tools.RetryStrategy.RETRY_NEVER
         )
-
-        (
-            realtime_data[beam.io.gcp.bigquery.BigQueryWriteFn.FAILED_ROWS]
-            | f"Window" >> GroupWindowsIntoBatches(window_size=options.bq_window_size)
-            | f"Failed Rows for {options.bq_table}" >> beam.ParDo(HandleBadRows(options.bq_dataset, options.bq_table))
         )
+        #
+        # (
+        #     realtime_data[beam.io.gcp.bigquery.BigQueryWriteFn.FAILED_ROWS]
+        #     | f"Window" >> GroupWindowsIntoBatches(window_size=options.bq_window_size)
+        #     | f"Failed Rows for {options.bq_table}" >> beam.ParDo(HandleBadRows(options.bq_dataset, options.bq_table))
+        # )
 
 
 if __name__ == "__main__":
